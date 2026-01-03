@@ -1310,7 +1310,7 @@ void setup()
       512,             // スタックサイズ (bytes) - 少し余裕を持たせる
       NULL,            // パラメータ
       3,               // 優先度 (高い)
-      xCanTaskHandle); // タスクハンドル
+      &xCanTaskHandle); // タスクハンドル
 
   // モーター制御タスク (中優先度)
   xTaskCreate(
@@ -1319,7 +1319,7 @@ void setup()
       512,               // スタックサイズ
       NULL,              // パラメータ
       2,                 // 優先度 (中)
-      xMotorTaskHandle); // タスクハンドル
+      &xMotorTaskHandle); // タスクハンドル
 
 #ifdef Seri
   Serial.println("Core 0: CANReadTask and MotorTask created.");
@@ -1339,7 +1339,7 @@ void setup()
       NULL,                // パラメータ
       1,                   // 優先度 (低)
       (1 << 1),            // ★アフィニティマスク (1 << 1) = Core 1に固定
-      xDisplayTaskHandle); // タスクハンドル
+      &xDisplayTaskHandle); // タスクハンドル
 
 #ifdef Seri
   Serial.println("Core 0: Handing over to RTOS scheduler.");
