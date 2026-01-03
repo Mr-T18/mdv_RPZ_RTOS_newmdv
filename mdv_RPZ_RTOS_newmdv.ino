@@ -220,7 +220,6 @@ bool initialDisplay()
   int flg = 0;
   int cnt_d = 4;
   char temp[10];
-  int rot = 0;
 
   u8x8.clear();
 
@@ -268,8 +267,7 @@ void settingsEdit()
   int data[3];
   char temp[10];
 
-  char rot = rot_reverse; // 順転(Forward):0,反転(Reverse):1
-  int rot_temp = rot;
+  int rot_temp = rot_reverse;
 
   u8x8.draw2x2String(0, 0, "ID: ");
   sprintf(temp, "%d", int(can_id));
@@ -369,7 +367,7 @@ void settingsEdit()
   }
 
   flg = 1;
-  cur = rot; // 最初のカーソルの位置は従来の設定の位置
+  cur = rot_reverse; // 最初のカーソルの位置は従来の設定の位置
   u8x8.clear();
 
   while (flg != 99)
@@ -378,14 +376,14 @@ void settingsEdit()
     {
       u8x8.drawString(0, 0, "Rotation:");
 
-      if (rot == 0) // 現在の順転or反転の設定を示す
+      if (rot_reverse == 0) // 現在の順転or反転の設定を示す
       {
         u8x8.setCursor(2, 2);
         u8x8.setFont(font_c);
         u8x8.print("\x45");
         u8x8.setFont(font_n);
       }
-      else if (rot == 1)
+      else if (rot_reverse == 1)
       {
         u8x8.setCursor(2, 3);
         u8x8.setFont(font_c);
@@ -423,20 +421,19 @@ void settingsEdit()
       flg = 3;
     if ((digitalRead(SW_R) == HIGH) && flg == 3)
     {
-      rot = rot_temp;
       flg = 99;
       delay(50);
     }
   }
 
+  ID_SET = can_id << 16; // <- この変数ID_SET，別に有効活用してない．
+  rot_reverse = rot_temp;
+
   EEPROM.write(0, can_id);
-  EEPROM.write(1, rot);
+  EEPROM.write(1, rot_reverse);
   EEPROM.end();
 
   init_can();
-
-  ID_SET = can_id << 16; // <- この変数ID_SET，別に有効活用してない．
-  rot_reverse = rot;
 
   return;
 }
@@ -1275,6 +1272,10 @@ void setup()
   {
     settingsEdit(); // set_CANID()の代わりに呼び出す．init_can()はsettingsEdit()の中で実行．
   }
+  else
+  {
+    init_can();
+  }
   // init_can();
 
   BaseDisplay();
@@ -1305,20 +1306,20 @@ void setup()
 
   // CAN読み取りタスク (高優先度)
   xTaskCreate(
-      canReadTask,     // タスク関数
-      "CANReadTask",   // 名前
-      512,             // スタックサイズ (bytes) - 少し余裕を持たせる
-      NULL,            // パラメータ
-      3,               // 優先度 (高い)
+      canReadTask,      // タスク関数
+      "CANReadTask",    // 名前
+      512,              // スタックサイズ (bytes) - 少し余裕を持たせる
+      NULL,             // パラメータ
+      3,                // 優先度 (高い)
       &xCanTaskHandle); // タスクハンドル
 
   // モーター制御タスク (中優先度)
   xTaskCreate(
-      motorTask,         // タスク関数
-      "MotorTask",       // 名前
-      512,               // スタックサイズ
-      NULL,              // パラメータ
-      2,                 // 優先度 (中)
+      motorTask,          // タスク関数
+      "MotorTask",        // 名前
+      512,                // スタックサイズ
+      NULL,               // パラメータ
+      2,                  // 優先度 (中)
       &xMotorTaskHandle); // タスクハンドル
 
 #ifdef Seri
@@ -1333,12 +1334,12 @@ void setup()
 
   // ディスプレイタスク (低優先度、Core 1に固定)
   xTaskCreateAffinitySet(
-      displayTask,         // タスク関数
-      "DisplayTask",       // 名前
-      1024,                // ★スタックサイズ (words) = 4096 bytes. これで十分なはず
-      NULL,                // パラメータ
-      1,                   // 優先度 (低)
-      (1 << 1),            // ★アフィニティマスク (1 << 1) = Core 1に固定
+      displayTask,          // タスク関数
+      "DisplayTask",        // 名前
+      1024,                 // ★スタックサイズ (words) = 4096 bytes. これで十分なはず
+      NULL,                 // パラメータ
+      1,                    // 優先度 (低)
+      (1 << 1),             // ★アフィニティマスク (1 << 1) = Core 1に固定
       &xDisplayTaskHandle); // タスクハンドル
 
 #ifdef Seri
