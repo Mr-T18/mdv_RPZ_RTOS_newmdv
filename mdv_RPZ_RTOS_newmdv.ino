@@ -555,6 +555,13 @@ void set_CANID()
 //  メインロジック (Core 0 / loopタスク)
 // =========================================================
 
+char Direction(unsigned char _dir)
+{
+  unsigned char temp = 0;
+  temp = (_dir + rot_reverse) % 2;
+  return temp;
+}
+
 /**
  * @brief メインの制御ロジック (オリジナル関数)
  * dly10() を vTaskDelay() に置き換え。
@@ -650,7 +657,6 @@ void Control()
     {
       duty = 0;
       rev = 0;
-      /* (オリジナルの位置制御ロジックはコメントアウトされていたためそのまま) */
     }
 
     // 速度制御モードの処理
@@ -658,7 +664,6 @@ void Control()
     {
       duty = 0;
       rev = 0;
-      /* (オリジナルの速度制御ロジックはコメントアウトされていたためそのまま) */
     }
 
     if (duty < 5)
@@ -677,12 +682,14 @@ void Control()
       if (flg == 1)
       {
         // ここにCWの処理を書く
-        dir = 0;
+        // dir = 0;
+        dir = Direction(0);
       }
       else
       {
         // ここにCCWの処理を書く
-        dir = 1;
+        // dir = 1;
+        dir = Direction(1);
       }
     }
 
@@ -761,8 +768,6 @@ void Motor()
     pre_mode = local_ctrl_mode;
   }
 
-  // CHK() は削除
-
   if (local_m_dir != pre_m_dir)
   {
     pre_m_dir = local_m_dir;
@@ -774,8 +779,6 @@ void Motor()
     else
       digitalWrite(MOT_DIR, HIGH);
   }
-
-  // CHK() は削除
 
   if (local_m_rev != pre_m_rev)
   {
@@ -792,8 +795,6 @@ void Motor()
       digitalWrite(MOT_OnF, LOW);
     }
   }
-
-  // CHK() は削除
 
   if (pre_m_duty == 0)
   {
@@ -1310,24 +1311,6 @@ void setup()
  */
 void loop()
 {
-
-  // // 1. CANデータが来ていたらフラグを処理
-  // // (flagRecv はクリティカルセクションで保護)
-  // taskENTER_CRITICAL();
-  // if (flagRecv == 1) {
-  //   flagRecv = 0; // フラグを消費
-  //   RFlag = 1;    // Control() 関数用のフラグを立てる
-  // }
-  // taskEXIT_CRITICAL();
-
-  // // 2. Control() 関数を実行
-  // // (内部の vTaskDelay(10) がタスクの切り替えポイントになる)
-  // Control();
-
-  // // Control() は最速でループさせたいが、CPUを100%専有させないために
-  // // わずかな遅延を入れる (Control内のvTaskDelay(10)がその役割を兼ねるが念のため)
-  // vTaskDelay(pdMS_TO_TICKS(1)); // 1ms Yield
-
   // 1. CANデータが来ていたらフラグを処理
   taskENTER_CRITICAL();
   if (flagRecv == 1)
@@ -1341,7 +1324,7 @@ void loop()
   Control();
 
 #ifdef Seri
-  Serial.println("[Core 0] loop() is running."); // ★この行を追加
+  // Serial.println("[Core 0] loop() is running.");
 #endif
 
   // 3. 1msだけタスクを休ませる
