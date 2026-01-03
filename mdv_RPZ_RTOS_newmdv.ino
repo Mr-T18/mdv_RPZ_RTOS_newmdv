@@ -54,6 +54,7 @@ unsigned char txBuf[8];
 #define _CAN_CS 5
 #define TX_LED 30
 #define RX_LED 17
+#define EDIT_SETTINGS 99
 
 // --- パラメータ定義 ---
 #define MAN_DUTY 200 // ボタンで動かすときのDuty
@@ -100,10 +101,16 @@ unsigned char pre_m_duty, pre_m_dir, pre_m_rev;
 unsigned long wdt0, wdt1, wdt2, wdt3;
 
 unsigned char rot_reverse; // 0:順転,1:反転
+volatile bool isEditMode = false;
 
 // --- FreeRTOSハンドル ---
 SemaphoreHandle_t xCanInterruptSemaphore; // CAN ISRがCANタスクを起こすためのセマフォ
 SemaphoreHandle_t xMotorDataMutex;        // Core 0とCore 1のデータ共有を保護するMutex
+
+// タスクハンドル
+TaskHandle_t xMotorTaskHandle = NULL;
+TaskHandle_t xDisplayTaskHandle = NULL;
+TaskHandle_t xCanTaskHandle = NULL;
 
 // =========================================================
 //  CAN処理 (ISR と タスク)
@@ -208,39 +215,28 @@ SW_Rを押すと決定
 
 */
 
-void settingsEdit()
+bool initialDisplay()
 {
-  int cnt_d = 4;
-  int cur = 0;
   int flg = 0;
-  int data[3];
+  int cnt_d = 4;
   char temp[10];
+  int rot = 0;
 
-  int rot = 0; // 順転(Forward):0,反転(Reverse):1
-  int rot_temp = 0;
+  u8x8.clear();
 
   can_id = EEPROM.read(0);
-  rot = EEPROM.read(1);
+  rot_reverse = EEPROM.read(1);
 
   u8x8.draw2x2String(0, 0, "ID: ");
   sprintf(temp, "%d", int(can_id));
   u8x8.draw2x2String(8, 0, temp);
-
-  data[0] = can_id / 100;
-  data[1] = (can_id - (data[0] * 100)) / 10;
-  data[2] = can_id % 10;
-
   u8x8.drawString(0, 2, "set > push 2 btn");
-
   u8x8.drawString(0, 3, "Ver.");
   u8x8.drawString(5, 3, Ver);
 
   while ((cnt_d > 0) && flg == 0) // 起動時のcanID設定モードon
   {
-    // ここで起動時にボタン押下を読み取る
-    // この分岐の処理と，canIDをカーソルで編集している処理を分ければ，
-    // サブボタン押下時にset_CANID関数を再利用できる
-    if ((digitalRead(SW_L) == HIGH) || (digitalRead(SW_R) == HIGH))
+    if ((digitalRead(SW_L) == HIGH) && (digitalRead(SW_R) == HIGH))
       cnt_d--;
     else
     {
@@ -256,9 +252,37 @@ void settingsEdit()
   delay(500);
   if (flg == 0)
   {
-    ID_SET = can_id << 16;
-    return;
+    // ID_SET = can_id << 16; <- こいつ元からおるけど必要ないよね？
+    return false;
   }
+  else
+  {
+    return true;
+  }
+}
+
+void settingsEdit()
+{
+  int cur = 0;
+  int flg = 0;
+  int data[3];
+  char temp[10];
+
+  char rot = rot_reverse; // 順転(Forward):0,反転(Reverse):1
+  int rot_temp = rot;
+
+  u8x8.draw2x2String(0, 0, "ID: ");
+  sprintf(temp, "%d", int(can_id));
+  u8x8.draw2x2String(8, 0, temp);
+
+  data[0] = can_id / 100;
+  data[1] = (can_id - (data[0] * 100)) / 10;
+  data[2] = can_id % 10;
+
+  u8x8.drawString(0, 2, "set > push 2 btn");
+
+  u8x8.drawString(0, 3, "Ver.");
+  u8x8.drawString(5, 3, Ver);
 
   u8x8.clear();
 
@@ -408,6 +432,9 @@ void settingsEdit()
   EEPROM.write(0, can_id);
   EEPROM.write(1, rot);
   EEPROM.end();
+
+  init_can();
+
   ID_SET = can_id << 16; // <- この変数ID_SET，別に有効活用してない．
   rot_reverse = rot;
 
@@ -820,6 +847,14 @@ void motorTask(void *pvParameters)
   TickType_t xLastWakeTime = xTaskGetTickCount();
   for (;;)
   {
+
+    if (isEditMode)
+    {
+      analogWrite(MOT_PWM, 0);
+      digitalWrite(MOT_OnF, LOW);
+      vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(WDT1_TIMEOUT));
+    }
+
     // Motor() 関数を実行
     Motor();
 
@@ -1230,11 +1265,17 @@ void setup()
   pinMode(TX_LED, OUTPUT);
   pinMode(RX_LED, OUTPUT);
 
+  pinMode(EDIT_SETTINGS, INPUT);
+
   digitalWrite(TX_LED, HIGH);
   digitalWrite(RX_LED, HIGH);
 
-  set_CANID();
-  init_can();
+  // set_CANID();
+  if (initialDisplay()) // initialDisplay() -> true or false
+  {
+    settingsEdit(); // set_CANID()の代わりに呼び出す．init_can()はsettingsEdit()の中で実行．
+  }
+  // init_can();
 
   BaseDisplay();
 
@@ -1264,21 +1305,21 @@ void setup()
 
   // CAN読み取りタスク (高優先度)
   xTaskCreate(
-      canReadTask,   // タスク関数
-      "CANReadTask", // 名前
-      512,           // スタックサイズ (bytes) - 少し余裕を持たせる
-      NULL,          // パラメータ
-      3,             // 優先度 (高い)
-      NULL);         // タスクハンドル
+      canReadTask,     // タスク関数
+      "CANReadTask",   // 名前
+      512,             // スタックサイズ (bytes) - 少し余裕を持たせる
+      NULL,            // パラメータ
+      3,               // 優先度 (高い)
+      xCanTaskHandle); // タスクハンドル
 
   // モーター制御タスク (中優先度)
   xTaskCreate(
-      motorTask,   // タスク関数
-      "MotorTask", // 名前
-      512,         // スタックサイズ
-      NULL,        // パラメータ
-      2,           // 優先度 (中)
-      NULL);       // タスクハンドル
+      motorTask,         // タスク関数
+      "MotorTask",       // 名前
+      512,               // スタックサイズ
+      NULL,              // パラメータ
+      2,                 // 優先度 (中)
+      xMotorTaskHandle); // タスクハンドル
 
 #ifdef Seri
   Serial.println("Core 0: CANReadTask and MotorTask created.");
@@ -1292,13 +1333,13 @@ void setup()
 
   // ディスプレイタスク (低優先度、Core 1に固定)
   xTaskCreateAffinitySet(
-      displayTask,   // タスク関数
-      "DisplayTask", // 名前
-      1024,          // ★スタックサイズ (words) = 4096 bytes. これで十分なはず
-      NULL,          // パラメータ
-      1,             // 優先度 (低)
-      (1 << 1),      // ★アフィニティマスク (1 << 1) = Core 1に固定
-      NULL);         // タスクハンドル
+      displayTask,         // タスク関数
+      "DisplayTask",       // 名前
+      1024,                // ★スタックサイズ (words) = 4096 bytes. これで十分なはず
+      NULL,                // パラメータ
+      1,                   // 優先度 (低)
+      (1 << 1),            // ★アフィニティマスク (1 << 1) = Core 1に固定
+      xDisplayTaskHandle); // タスクハンドル
 
 #ifdef Seri
   Serial.println("Core 0: Handing over to RTOS scheduler.");
@@ -1311,7 +1352,7 @@ void setup()
  */
 void loop()
 {
-  // 1. CANデータが来ていたらフラグを処理
+  // CANデータが来ていたらフラグを処理
   taskENTER_CRITICAL();
   if (flagRecv == 1)
   {
@@ -1320,15 +1361,32 @@ void loop()
   }
   taskEXIT_CRITICAL();
 
-  // 2. Control() 関数を実行
+  if (digitalRead(EDIT_SETTINGS) == LOW)
+  {
+    isEditMode = true;
+    settingsEdit();
+
+    // canバッファにたまった受信内容を掃除
+    xSemaphoreTake(xCanInterruptSemaphore, 0); // 待ち時間0でTakeして、フラグを強制的にDownさせる
+    while (CAN.checkReceive() == CAN_MSGAVAIL)
+    {
+      CAN.readMsgBuf(&ID_RCV, &len, rxBuf); // 読み出すだけで何もしない
+    }
+    wdt0 = millis();
+    flagRecv = 0;
+    RFlag = 0;
+
+    isEditMode = false;
+    BaseDisplay();
+  }
+
   Control();
 
 #ifdef Seri
   // Serial.println("[Core 0] loop() is running.");
 #endif
 
-  // 3. 1msだけタスクを休ませる
-  vTaskDelay(pdMS_TO_TICKS(1)); // 1ms Yield
+  vTaskDelay(pdMS_TO_TICKS(1));
 }
 
 // =========================================================
@@ -1352,13 +1410,14 @@ void displayTask(void *pvParameters)
 
   for (;;)
   { // タスクは必ず無限ループにする
-    // 1. ディスプレイ更新 (重い処理)
+
+    if (isEditMode) // 設定編集中なら待ち状態にする
+    {
+      vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(WDT2_TIMEOUT));
+      continue;
+    }
     SetDisplay();
-
-    // 2. シリアルステータス表示
     showStatus();
-
-    // 3. 次の周期までスリープ (WDT2_TIMEOUT 周期)
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(WDT2_TIMEOUT));
   }
 }
