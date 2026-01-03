@@ -99,6 +99,8 @@ unsigned char m_duty, m_dir, m_rev, rev;
 unsigned char pre_m_duty, pre_m_dir, pre_m_rev;
 unsigned long wdt0, wdt1, wdt2, wdt3;
 
+unsigned char rot_reverse; // 0:順転,1:反転
+
 // --- FreeRTOSハンドル ---
 SemaphoreHandle_t xCanInterruptSemaphore; // CAN ISRがCANタスクを起こすためのセマフォ
 SemaphoreHandle_t xMotorDataMutex;        // Core 0とCore 1のデータ共有を保護するMutex
@@ -188,11 +190,232 @@ void init_can()
   return;
 }
 
+/* ここから新機能
+ */
+
+// canIDの設定のあと，順転or反転の設定を行う
+
+/*
+順転 or 反転の設定画面(従来の設定が順転の場合)
+
+
+  ◎Forward
+    Reverse
+
+選んだほうのフォントを白黒反転して選択状態を見やすいようにする
+SW_Lを押すと切り替え，
+SW_Rを押すと決定
+
+*/
+
+void settingsEdit()
+{
+  int cnt_d = 4;
+  int cur = 0;
+  int flg = 0;
+  int data[3];
+  char temp[10];
+
+  int rot = 0; // 順転(Forward):0,反転(Reverse):1
+  int rot_temp = 0;
+
+  can_id = EEPROM.read(0);
+  rot = EEPROM.read(1);
+
+  u8x8.draw2x2String(0, 0, "ID: ");
+  sprintf(temp, "%d", int(can_id));
+  u8x8.draw2x2String(8, 0, temp);
+
+  data[0] = can_id / 100;
+  data[1] = (can_id - (data[0] * 100)) / 10;
+  data[2] = can_id % 10;
+
+  u8x8.drawString(0, 2, "set > push 2 btn");
+
+  u8x8.drawString(0, 3, "Ver.");
+  u8x8.drawString(5, 3, Ver);
+
+  while ((cnt_d > 0) && flg == 0) // 起動時のcanID設定モードon
+  {
+    // ここで起動時にボタン押下を読み取る
+    // この分岐の処理と，canIDをカーソルで編集している処理を分ければ，
+    // サブボタン押下時にset_CANID関数を再利用できる
+    if ((digitalRead(SW_L) == HIGH) || (digitalRead(SW_R) == HIGH))
+      cnt_d--;
+    else
+    {
+      flg = 1;
+      cnt_d = 0;
+    }
+
+    sprintf(temp, "%d", cnt_d);
+    u8x8.drawString(15, 3, temp);
+    delay(1000);
+  }
+
+  delay(500);
+  if (flg == 0)
+  {
+    ID_SET = can_id << 16;
+    return;
+  }
+
+  u8x8.clear();
+
+  flg = 1;
+
+  while (flg != 99)
+  {
+
+    if (flg == 1)
+    {
+
+      u8x8.drawString(13, 3, "Ent");
+      u8x8.drawString(9, 3, ">");
+      u8x8.draw2x2String(0, 0, "ID:");
+
+      if (cur == 0)
+        u8x8.setInverseFont(1);
+      else
+        u8x8.setInverseFont(0);
+      sprintf(temp, "%d", data[0]);
+      u8x8.draw2x2String(6, 0, temp);
+
+      if (cur == 1)
+        u8x8.setInverseFont(1);
+      else
+        u8x8.setInverseFont(0);
+      sprintf(temp, "%d", data[1]);
+      u8x8.draw2x2String(8, 0, temp);
+
+      if (cur == 2)
+        u8x8.setInverseFont(1);
+      else
+        u8x8.setInverseFont(0);
+      sprintf(temp, "%d", data[2]);
+      u8x8.draw2x2String(10, 0, temp);
+
+      if (cur == 3)
+        u8x8.setInverseFont(1);
+      else
+        u8x8.setInverseFont(0);
+      can_id = ((data[0] * 100) + (data[1] * 10) + data[2]);
+      if ((can_id > 254) || (can_id < 1))
+        u8x8.draw2x2String(12, 0, "_");
+      else
+        u8x8.draw2x2String(12, 0, "*");
+
+      u8x8.setInverseFont(0);
+    }
+
+    if (digitalRead(SW_L) == LOW) // 左ボタン押下時．カーソルを動かす
+      flg = 2;
+    if ((digitalRead(SW_L) == HIGH) && flg == 2) // ボタンのチャタリング防止
+    {
+      cur++;
+      if (cur > 3)
+        cur = 0;
+      flg = 1;
+    }
+
+    if (digitalRead(SW_R) == LOW) // 右ボタン押下時．カーソルのある場所の数字を変えるorエンター
+      flg = 3;
+    if ((digitalRead(SW_R) == HIGH) && flg == 3)
+    {
+      if (cur != 3)
+      {
+        data[cur]++;
+        if (data[cur] > 9)
+          data[cur] = 0;
+        if ((cur == 0) && (data[cur] > 2))
+          data[cur] = 0;
+        delay(50);
+        flg = 1;
+      }
+      else
+      {
+        can_id = (data[0] * 100) + (data[1] * 10) + data[2];
+        if ((can_id <= 254) && (can_id >= 1))
+          flg = 99;
+        else
+          flg = 1;
+      }
+      delay(50);
+    }
+  }
+
+  flg = 1;
+  cur = rot; // 最初のカーソルの位置は従来の設定の位置
+  u8x8.clear();
+
+  while (flg != 99)
+  {
+    if (flg == 1)
+    {
+      u8x8.drawString(0, 0, "Rotation:");
+
+      if (rot == 0) // 現在の順転or反転の設定を示す
+      {
+        u8x8.setCursor(2, 2);
+        u8x8.setFont(font_c);
+        u8x8.print("\x45");
+        u8x8.setFont(font_n);
+      }
+      else if (rot == 1)
+      {
+        u8x8.setCursor(2, 3);
+        u8x8.setFont(font_c);
+        u8x8.print("\x45");
+        u8x8.setFont(font_n);
+      }
+
+      if (cur == 0)
+        u8x8.setInverseFont(1);
+      else
+        u8x8.setInverseFont(0);
+      u8x8.drawString(3, 2, "Forward");
+
+      if (cur == 1)
+        u8x8.setInverseFont(1);
+      else
+        u8x8.setInverseFont(0);
+      u8x8.drawString(3, 3, "Reverse");
+
+      u8x8.setInverseFont(0);
+    }
+
+    if (digitalRead(SW_L) == LOW) // 左ボタン押下時．カーソルを動かす
+      flg = 2;
+    if ((digitalRead(SW_L) == HIGH) && flg == 2) // ボタンのチャタリング防止
+    {
+      cur++;
+      if (cur > 2)
+        cur = 0;
+      flg = 1;
+      rot_temp = cur;
+    }
+
+    if (digitalRead(SW_R) == LOW) // 右ボタン押下時．エンター
+      flg = 3;
+    if ((digitalRead(SW_R) == HIGH) && flg == 3)
+    {
+      rot = rot_temp;
+      flg = 99;
+      delay(50);
+    }
+  }
+
+  EEPROM.write(0, can_id);
+  EEPROM.write(1, rot);
+  EEPROM.end();
+  ID_SET = can_id << 16; // <- この変数ID_SET，別に有効活用してない．
+  rot_reverse = rot;
+
+  return;
+}
+
 void set_CANID()
 {
-  // ... (オリジナルの set_CANID 関数はそのまま) ...
-  // setup()の最初でしか呼ばれないので、delay()をvTaskDelay()に
-  // 置き換える必要は必ずしもない。
   int cnt_d = 4;
   int cur = 0;
   int flg = 0;
@@ -214,7 +437,7 @@ void set_CANID()
   u8x8.drawString(0, 3, "Ver.");
   u8x8.drawString(5, 3, Ver);
 
-  while ((cnt_d > 0) && flg == 0)
+  while ((cnt_d > 0) && flg == 0) // 起動時のcanID設定モードon
   {
     // ここで起動時にボタン押下を読み取る
     // この分岐の処理と，canIDをカーソルで編集している処理を分ければ，
@@ -285,9 +508,9 @@ void set_CANID()
       u8x8.setInverseFont(0);
     }
 
-    if (digitalRead(SW_L) == LOW)
+    if (digitalRead(SW_L) == LOW) // 左ボタン押下時．カーソルを動かす
       flg = 2;
-    if ((digitalRead(SW_L) == HIGH) && flg == 2)
+    if ((digitalRead(SW_L) == HIGH) && flg == 2) // ボタンのチャタリング防止
     {
       cur++;
       if (cur > 3)
@@ -295,7 +518,7 @@ void set_CANID()
       flg = 1;
     }
 
-    if (digitalRead(SW_R) == LOW)
+    if (digitalRead(SW_R) == LOW) // 右ボタン押下時．カーソルのある場所の数字を変えるorエンター
       flg = 3;
     if ((digitalRead(SW_R) == HIGH) && flg == 3)
     {
@@ -610,7 +833,6 @@ void motorTask(void *pvParameters)
 
 void BaseDisplay()
 {
-  // ... (オリジナルの BaseDisplay 関数はそのまま) ...
   char temp[10];
 
   u8x8.clear();
