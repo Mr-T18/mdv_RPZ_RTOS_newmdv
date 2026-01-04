@@ -344,7 +344,7 @@ void settingsEdit()
       flg = 3;
     if ((digitalRead(SW_R) == HIGH) && flg == 3)
     {
-      if (cur != 3)
+      if (cur != 3) // 数字を変える
       {
         data[cur]++;
         if (data[cur] > 9)
@@ -354,7 +354,7 @@ void settingsEdit()
         delay(50);
         flg = 1;
       }
-      else
+      else // エンター
       {
         can_id = (data[0] * 100) + (data[1] * 10) + data[2];
         if ((can_id <= 254) && (can_id >= 1))
@@ -582,7 +582,7 @@ void set_CANID()
 char Direction(unsigned char _dir)
 {
   unsigned char temp = 0;
-  temp = (_dir + rot_reverse) % 2;
+  temp = _dir ^ rot_reverse; // xor
   return temp;
 }
 
@@ -657,9 +657,11 @@ void Control()
 
       // 指令値代入処理の間はCAN受信割り込みを停止
       if ((localBuf[0] & 0x01) != 0)
-        dir = 0; // 命令1バイト目が xxxx xx01 ならCW
+        // dir = 0; // 命令1バイト目が xxxx xx01 ならCW
+        dir = Direction(0);
       if ((localBuf[0] & 0x02) != 0)
-        dir = 1; // 命令1バイト目が xxxx xx10 ならCCW
+        // dir = 1; // 命令1バイト目が xxxx xx10 ならCCW
+        dir = Direction(1);
 
       ctrl_mode = localBuf[0] >> 6; // 命令1バイト目の上位2ビットを制御モードとして代入
 
@@ -1381,7 +1383,10 @@ void loop()
     BaseDisplay();
   }
 
-  Control();
+  if (!isEditMode)
+  {
+    Control();
+  }
 
 #ifdef Seri
   // Serial.println("[Core 0] loop() is running.");
