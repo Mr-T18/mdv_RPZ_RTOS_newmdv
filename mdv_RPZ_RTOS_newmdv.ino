@@ -68,6 +68,9 @@ unsigned char txBuf[8];
 #define WDT1_TIMEOUT 50  // Motorタスクの実行周期 (ms)
 #define WDT2_TIMEOUT 250 // Displayタスクの実行周期 (ms)
 
+#define ROT_FOR 0
+#define ROT_REV 1
+
 MCP_CAN CAN(SPI_CS_PIN); // Set CS pin
 
 // --- グローバル変数 (オリジナルコードより) ---
@@ -920,10 +923,10 @@ void BaseDisplay()
 
   u8x8.setFont(font_c);
   u8x8.setCursor(9, 3);
-  u8x8.print(" \x41 ");
+  u8x8.print(" \x43 ");
 
   u8x8.setCursor(13, 3);
-  u8x8.print(" \x43 ");
+  u8x8.print(" \x41 ");
   u8x8.setFont(font_n);
 
   u8x8.setCursor(0, 1);
@@ -940,6 +943,12 @@ void BaseDisplay()
 
   u8x8.setCursor(0, 3);
   u8x8.print("Lmt:");
+
+  u8x8.setCursor(9, 0);
+  if (rot_reverse == ROT_FOR)
+    u8x8.print("For");
+  else if (rot_reverse == ROT_REV)
+    u8x8.print("Rev");
 }
 
 /**
@@ -1047,14 +1056,14 @@ void SetDisplay()
     { // 'flg' はCore 0のControlタスク専用のためMutex不要
       u8x8.setCursor(9, 3);
       u8x8.setFont(font_c);
-      u8x8.print(" \x40 ");
+      u8x8.print(" \x42 ");
       u8x8.setFont(font_n);
     }
     else
     {
       u8x8.setCursor(13, 3);
       u8x8.setFont(font_c);
-      u8x8.print(" \x42 ");
+      u8x8.print(" \x40 ");
       u8x8.setFont(font_n);
     }
     dsp_flg3 = 1;
@@ -1068,9 +1077,9 @@ void SetDisplay()
   {
     u8x8.setFont(font_c);
     u8x8.setCursor(9, 3);
-    u8x8.print(" \x41 ");
-    u8x8.setCursor(13, 3);
     u8x8.print(" \x43 ");
+    u8x8.setCursor(13, 3);
+    u8x8.print(" \x41 ");
     u8x8.setFont(font_n);
     dsp_flg3 = 0;
   }
@@ -1110,22 +1119,22 @@ void SetDisplay()
   {
     if (local_m_rev == 0)
     {
-      u8x8.print(" \x41 ");
+      u8x8.print(" \x43 ");
     }
     else
     {
-      u8x8.print(" \x40 ");
+      u8x8.print(" \x42 ");
     }
   } // ローカル変数
   else
   {
     if (local_m_rev == 0)
     {
-      u8x8.print(" \x43 ");
+      u8x8.print(" \x41 ");
     }
     else
     {
-      u8x8.print(" \x42 ");
+      u8x8.print(" \x40 ");
     }
   }
 
