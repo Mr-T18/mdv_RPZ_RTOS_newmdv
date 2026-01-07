@@ -43,13 +43,13 @@ unsigned char txBuf[8];
 
 // --- ピン定義 ---
 #define SPI_CS_PIN 5
-#define SW_L 12
-#define SW_R 7
+#define SW_L 7
+#define SW_R 12
 #define LMT_H 13
 #define LMT_L 14
 #define MOT_DIR 28
-#define MOT_OnF 29
-#define MOT_PWM 15
+#define MOT_OnF 27
+#define MOT_PWM 29
 #define _CAN_INT 8
 #define _CAN_CS 5
 #define TX_LED 30
@@ -378,7 +378,6 @@ void settingsEdit()
       u8x8.drawString(0, 0, "Rotation:");
       u8x8.drawString(0, 3, "Enter");
 
-
       if (rot_reverse == 0) // 現在の順転or反転の設定を示す
       {
         u8x8.setCursor(2, 1);
@@ -413,12 +412,12 @@ void settingsEdit()
       u8x8.drawString(0, 3, "Enter");
 
       u8x8.setInverseFont(0);
-      if(select == 0)
+      if (select == 0)
       {
         u8x8.drawString(10, 1, "<<");
         u8x8.drawString(10, 2, "  ");
       }
-      else if(select == 1)
+      else if (select == 1)
       {
         u8x8.drawString(10, 1, "  ");
         u8x8.drawString(10, 2, "<<");
@@ -445,18 +444,20 @@ void settingsEdit()
     }
     if ((digitalRead(SW_R) == HIGH) && flg == 3)
     {
-      if(cur < 2){
+      if (cur < 2)
+      {
         select = cur;
         flg = 1;
         delay(50);
       }
-      else{
+      else
+      {
         flg = 99;
-        if(select != 255) rot_reverse = select;
+        if (select != 255)
+          rot_reverse = select;
         delay(50);
       }
     }
-    
   }
 
   ID_SET = can_id << 16; // <- この変数ID_SET，別に有効活用してない.
@@ -833,9 +834,16 @@ void Motor()
     analogWrite(MOT_PWM, 0);
     vTaskDelay(pdMS_TO_TICKS(10)); // dly10() を置き換え
     if (local_m_dir == 0)
+    {
       digitalWrite(MOT_DIR, LOW);
+      Serial.print("LOW output");
+    }
+
     else
+    {
       digitalWrite(MOT_DIR, HIGH);
+      Serial.print("HIGH output");
+    }
   }
 
   if (local_m_rev != pre_m_rev)
