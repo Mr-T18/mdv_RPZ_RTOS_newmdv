@@ -43,8 +43,8 @@ unsigned char txBuf[8];
 
 // --- ピン定義 ---
 #define SPI_CS_PIN 5
-#define SW_L 7
-#define SW_R 6
+#define SW_L 12
+#define SW_R 7
 #define LMT_H 13
 #define LMT_L 14
 #define MOT_DIR 28
@@ -54,7 +54,7 @@ unsigned char txBuf[8];
 #define _CAN_CS 5
 #define TX_LED 30
 #define RX_LED 17
-#define EDIT_SETTINGS 99
+#define EDIT_SETTINGS 26
 
 // --- パラメータ定義 ---
 #define MAN_DUTY 200 // ボタンで動かすときのDuty
@@ -267,7 +267,8 @@ void settingsEdit()
   int data[3];
   char temp[10];
 
-  int rot_temp = rot_reverse;
+  char rot_temp = rot_reverse;
+  char select = 255;
 
   u8x8.draw2x2String(0, 0, "ID: ");
   sprintf(temp, "%d", int(can_id));
@@ -375,17 +376,19 @@ void settingsEdit()
     if (flg == 1)
     {
       u8x8.drawString(0, 0, "Rotation:");
+      u8x8.drawString(0, 3, "Enter");
+
 
       if (rot_reverse == 0) // 現在の順転or反転の設定を示す
       {
-        u8x8.setCursor(2, 2);
+        u8x8.setCursor(2, 1);
         u8x8.setFont(font_c);
         u8x8.print("\x45");
         u8x8.setFont(font_n);
       }
       else if (rot_reverse == 1)
       {
-        u8x8.setCursor(2, 3);
+        u8x8.setCursor(2, 2);
         u8x8.setFont(font_c);
         u8x8.print("\x45");
         u8x8.setFont(font_n);
@@ -395,15 +398,34 @@ void settingsEdit()
         u8x8.setInverseFont(1);
       else
         u8x8.setInverseFont(0);
-      u8x8.drawString(3, 2, "Forward");
+      u8x8.drawString(3, 1, "Forward");
 
       if (cur == 1)
         u8x8.setInverseFont(1);
       else
         u8x8.setInverseFont(0);
-      u8x8.drawString(3, 3, "Reverse");
+      u8x8.drawString(3, 2, "Reverse");
+
+      if (cur == 2)
+        u8x8.setInverseFont(1);
+      else
+        u8x8.setInverseFont(0);
+      u8x8.drawString(0, 3, "Enter");
 
       u8x8.setInverseFont(0);
+      if(select == 0)
+      {
+        u8x8.drawString(10, 1, "<<");
+        u8x8.drawString(10, 2, "  ");
+      }
+      else if(select == 1)
+      {
+        u8x8.drawString(10, 1, "  ");
+        u8x8.drawString(10, 2, "<<");
+      }
+      else
+        ;
+      flg = 10;
     }
 
     if (digitalRead(SW_L) == LOW) // 左ボタン押下時．カーソルを動かす
@@ -418,16 +440,26 @@ void settingsEdit()
     }
 
     if (digitalRead(SW_R) == LOW) // 右ボタン押下時．エンター
+    {
       flg = 3;
+    }
     if ((digitalRead(SW_R) == HIGH) && flg == 3)
     {
-      flg = 99;
-      delay(50);
+      if(cur < 2){
+        select = cur;
+        flg = 1;
+        delay(50);
+      }
+      else{
+        flg = 99;
+        if(select != 255) rot_reverse = select;
+        delay(50);
+      }
     }
+    
   }
 
-  ID_SET = can_id << 16; // <- この変数ID_SET，別に有効活用してない．
-  rot_reverse = rot_temp;
+  ID_SET = can_id << 16; // <- この変数ID_SET，別に有効活用してない.
 
   EEPROM.write(0, can_id);
   EEPROM.write(1, rot_reverse);
@@ -1367,6 +1399,7 @@ void loop()
   if (digitalRead(EDIT_SETTINGS) == LOW)
   {
     isEditMode = true;
+    delay(50);
     settingsEdit();
 
     // canバッファにたまった受信内容を掃除
@@ -1378,9 +1411,10 @@ void loop()
     wdt0 = millis();
     flagRecv = 0;
     RFlag = 0;
+    BaseDisplay();
+    delay(50);
 
     isEditMode = false;
-    BaseDisplay();
   }
 
   if (!isEditMode)
