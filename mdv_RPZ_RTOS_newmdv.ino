@@ -292,7 +292,6 @@ void settingsEdit()
 
   while (flg != 99)
   {
-
     if (flg == 1)
     {
 
