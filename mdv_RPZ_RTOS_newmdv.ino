@@ -54,7 +54,7 @@ unsigned char txBuf[8];
 #define _CAN_CS 5
 #define TX_LED 30
 #define RX_LED 17
-#define EDIT_SETTINGS 26
+#define SW_SUB 26
 
 // --- パラメータ定義 ---
 #define MAN_DUTY 200 // ボタンで動かすときのDuty
@@ -1271,7 +1271,6 @@ void showStatus()
     Serial.print(local_ctrl_mode);
     Serial.print("   ");
     Serial.println("");
-    Serial.println("");
   }
 #endif
 }
@@ -1312,7 +1311,7 @@ void setup()
   pinMode(TX_LED, OUTPUT);
   pinMode(RX_LED, OUTPUT);
 
-  pinMode(EDIT_SETTINGS, INPUT);
+  pinMode(SW_SUB, INPUT);
 
   digitalWrite(TX_LED, HIGH);
   digitalWrite(RX_LED, HIGH);
@@ -1412,7 +1411,7 @@ void loop()
   }
   taskEXIT_CRITICAL();
 
-  if (digitalRead(EDIT_SETTINGS) == LOW)
+  if (digitalRead(SW_SUB) == LOW)
   {
     isEditMode = true;
     delay(50);
@@ -1458,7 +1457,7 @@ void displayTask(void *pvParameters)
 {
 #ifdef Seri
   // Core 1 が起動したことをCore 0のシリアルに表示
-  Serial.println("[Core 1] displayTask is ALIVE!");
+  // Serial.println("[Core 1] displayTask is ALIVE!");
 #endif
 
   // 周期実行のための最終起動時間を記録
