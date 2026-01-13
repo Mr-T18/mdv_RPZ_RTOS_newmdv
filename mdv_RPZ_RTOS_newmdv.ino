@@ -234,8 +234,16 @@ bool initialDisplay()
   sprintf(temp, "%d", int(can_id));
   u8x8.draw2x2String(8, 0, temp);
   u8x8.drawString(0, 2, "set > push 2 btn");
-  u8x8.drawString(0, 3, "Ver.");
-  u8x8.drawString(5, 3, Ver);
+  u8x8.drawString(0, 3, "Dir:");
+
+  if (rot_reverse == true)
+  {
+    u8x8.drawString(5, 3, "Reverse");
+  }
+  else if (rot_reverse == false)
+  {
+    u8x8.drawString(5, 3, "Forward");
+  }
 
   while ((cnt_d > 0) && flg == 0) // 起動時のcanID設定モードon
   {
@@ -668,6 +676,18 @@ void Control()
     wdt0 = millis();
   }
 
+  // 同時押しは停止にする
+  if (SW_L_pushed && SW_R_pushed)
+  {
+    vTaskDelay(pdMS_TO_TICKS(10));
+    if (SW_L_pushed && SW_R_pushed)
+    {
+      flg = 5;
+      ctrl_mode = 9;
+      wdt0 = millis();
+    }
+  }
+
   // コントロールモードごとの処理
   if (ctrl_mode != 9)
   {
@@ -841,7 +861,7 @@ void Motor()
     pre_m_duty = 0;
     analogWrite(MOT_PWM, 0);
     vTaskDelay(pdMS_TO_TICKS(10)); // dly10() を置き換え
-    }
+  }
 
   if (local_m_rev != pre_m_rev)
   {
@@ -1063,7 +1083,7 @@ void SetDisplay()
       u8x8.print(" \x42 ");
       u8x8.setFont(font_n);
     }
-    if(SW_R_pushed)
+    if (SW_R_pushed)
     {
       u8x8.setCursor(13, 3);
       u8x8.setFont(font_c);
@@ -1074,6 +1094,20 @@ void SetDisplay()
     break;
   case 99:
     u8x8.print("Stp");
+    if (SW_L_pushed && SW_R_pushed)
+    {
+      u8x8.setFont(font_c);
+      u8x8.setCursor(10, 3);
+      u8x8.print("\x42");
+      u8x8.setCursor(14, 3);
+      u8x8.print("\x40");
+    }
+    else
+    {
+      u8x8.setFont(font_c);
+      u8x8.setCursor(9, 3);
+      u8x8.print(" \x43   \x41");
+    }
     break;
   }
 
