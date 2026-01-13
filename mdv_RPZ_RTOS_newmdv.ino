@@ -50,7 +50,7 @@ unsigned char txBuf[8];
 #define MOT_DIR 28
 #define MOT_OnF 27
 #define MOT_PWM 29
-#define _CAN_INT 8
+#define _CAN_INT 6
 #define _CAN_CS 5
 #define TX_LED 30
 #define RX_LED 17
@@ -102,6 +102,7 @@ unsigned char wdt_flg;
 unsigned char m_duty, m_dir, m_rev, rev;
 unsigned char pre_m_duty, pre_m_dir, pre_m_rev;
 unsigned long wdt0, wdt1, wdt2, wdt3;
+bool SW_L_pushed = false, SW_R_pushed = false;
 
 unsigned char rot_reverse; // 0:順転,1:反転
 volatile bool isEditMode = false;
@@ -633,6 +634,7 @@ void Control()
   // Manualモード(ctrl_mode = 9)
   if (digitalRead(SW_L) == LOW)
   {
+    SW_L_pushed = true;
     vTaskDelay(pdMS_TO_TICKS(10)); // dly10() を置き換え
     if ((digitalRead(SW_L) == LOW))
     {
@@ -641,13 +643,16 @@ void Control()
       wdt0 = millis();
     }
   }
-  else if ((digitalRead(SW_L) == HIGH) && (flg == 1))
+  else if ((digitalRead(SW_L) == HIGH) && SW_L_pushed)
   {
+    SW_L_pushed = false;
     flg = 5;
+    wdt0 = millis();
   }
 
   if (digitalRead(SW_R) == LOW)
   {
+    SW_R_pushed = true;
     vTaskDelay(pdMS_TO_TICKS(10)); // dly10() を置き換え
     if ((digitalRead(SW_R) == LOW))
     {
@@ -656,8 +661,9 @@ void Control()
       wdt0 = millis();
     }
   }
-  else if ((digitalRead(SW_R) == HIGH) && (flg == 2))
+  else if ((digitalRead(SW_R) == HIGH) && SW_R_pushed)
   {
+    SW_R_pushed = false;
     flg = 5;
     wdt0 = millis();
   }
@@ -764,7 +770,7 @@ void Control()
     }
   }
 
-  if ((dir == 0) && (digitalRead(LMT_H) == LOW))
+  if ((dir == HIGH) && (digitalRead(LMT_H) == LOW))
   {
     // ここに停止処理を書く
     duty = 0;
@@ -772,7 +778,7 @@ void Control()
     rev = 0;
   }
 
-  if ((dir == 1) && (digitalRead(LMT_L) == LOW))
+  if ((dir == LOW) && (digitalRead(LMT_L) == LOW))
   {
     // ここに停止処理を書く
     duty = 0;
@@ -835,18 +841,7 @@ void Motor()
     pre_m_duty = 0;
     analogWrite(MOT_PWM, 0);
     vTaskDelay(pdMS_TO_TICKS(10)); // dly10() を置き換え
-    if (local_m_dir == 0)
-    {
-      digitalWrite(MOT_DIR, LOW);
-      Serial.print("LOW output");
     }
-
-    else
-    {
-      digitalWrite(MOT_DIR, HIGH);
-      Serial.print("HIGH output");
-    }
-  }
 
   if (local_m_rev != pre_m_rev)
   {
@@ -855,6 +850,16 @@ void Motor()
     if (local_m_rev == 1)
     {
       digitalWrite(MOT_OnF, HIGH);
+      if (local_m_dir == 0)
+      {
+        digitalWrite(MOT_DIR, LOW);
+        Serial.print("LOW output");
+      }
+      else
+      {
+        digitalWrite(MOT_DIR, HIGH);
+        Serial.print("HIGH output");
+      }
     }
     else
     {
@@ -943,7 +948,7 @@ void BaseDisplay()
   u8x8.setCursor(0, 3);
   u8x8.print("Lmt:");
 
-  u8x8.setCursor(9, 0);
+  u8x8.setCursor(10, 0);
   if (rot_reverse == ROT_FOR)
     u8x8.print("For");
   else if (rot_reverse == ROT_REV)
@@ -1051,14 +1056,14 @@ void SetDisplay()
     break;
   case 9:
     u8x8.print("Btn");
-    if (flg == 1)
+    if (SW_L_pushed)
     { // 'flg' はCore 0のControlタスク専用のためMutex不要
       u8x8.setCursor(9, 3);
       u8x8.setFont(font_c);
       u8x8.print(" \x42 ");
       u8x8.setFont(font_n);
     }
-    else
+    if(SW_R_pushed)
     {
       u8x8.setCursor(13, 3);
       u8x8.setFont(font_c);
